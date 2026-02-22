@@ -1,76 +1,60 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-from urllib.parse import unquote
 
 KEYWORDS = [
-    "hiring react developer",
-    "frontend developer hiring",
-    "mern developer hiring",
-    "software developer intern hiring"
+    "react developer",
+    "frontend developer",
+    "mern developer",
+    "software developer intern"
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 HOT_WORDS = [
-    "apply here", "apply now", "registration", "google form",
-    "forms.gle", "docs.google.com/forms", "careers", "job link"
+    "apply", "form", "registration", "link", "careers",
+    "forms.gle", "docs.google.com/forms"
 ]
 
 WARM_WORDS = [
-    "send resume", "share resume", "dm me", "inbox me",
-    "email your cv", "looking for", "we are hiring"
+    "send resume", "share resume", "dm", "inbox",
+    "email cv", "we are hiring", "looking for"
 ]
 
-def clean_link(href):
-    if href and href.startswith("/url?q="):
-        return unquote(href.split("/url?q=")[1].split("&")[0])
-    return None
-
-def classify(text, link):
-    content = (text + " " + link).lower()
-
-    if any(w in content for w in HOT_WORDS):
+def classify(text):
+    t = text.lower()
+    if any(w in t for w in HOT_WORDS):
         return "HOT 🔥 Apply Fast"
-    elif any(w in content for w in WARM_WORDS):
+    if any(w in t for w in WARM_WORDS):
         return "WARM ⭐ Message HR"
     return "COLD"
 
-def detect_role(text):
-    text = text.lower()
-    if "react" in text: return "React Developer"
-    if "frontend" in text: return "Frontend Developer"
-    if "mern" in text: return "MERN Developer"
-    if "intern" in text: return "Intern"
-    return "Developer"
+def fetch_posts(keyword):
+    url = f"https://www.bing.com/search?q=site:linkedin.com/posts+{keyword}+hiring&count=20"
+    html = requests.get(url, headers=HEADERS).text
+    soup = BeautifulSoup(html, "html.parser")
 
-def search():
-    results = set()
+    posts = []
 
-    for keyword in KEYWORDS:
-        url = f"https://www.google.com/search?q=site:linkedin.com/posts {keyword}&num=20&sort=date"
-        html = requests.get(url, headers=HEADERS).text
-        soup = BeautifulSoup(html, "html.parser")
+    for a in soup.select("li.b_algo h2 a"):
+        link = a.get("href")
+        title = a.get_text(" ", strip=True)
 
-        for a in soup.select("a"):
-            link = clean_link(a.get("href"))
-            if not link or "linkedin.com/posts" not in link:
-                continue
+        if "linkedin.com/posts" in link:
+            priority = classify(title)
+            posts.append((priority, keyword.title(), link))
 
-            text = a.get_text(" ", strip=True)
+    return posts
 
-            priority = classify(text, link)
-            role = detect_role(text)
+all_jobs = set()
 
-            results.add((priority, role, link))
-
-    return sorted(results, reverse=True)
-
-jobs = search()
+for k in KEYWORDS:
+    for job in fetch_posts(k):
+        all_jobs.add(job)
 
 with open("jobs.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["Priority", "Role", "Link"])
-    writer.writerows(jobs)
+    writer.writerows(sorted(all_jobs, reverse=True))
 
 print("Saved jobs.csv")
